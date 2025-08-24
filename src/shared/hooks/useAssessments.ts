@@ -34,13 +34,14 @@ export const useAssessments = () => {
         error: null
       });
     } catch (error: any) {
+      console.error('Failed to load assessments:', error);
       setState(prev => ({
         ...prev,
         loading: false,
         error: error.message || 'Failed to load assessments'
       }));
     }
-  }, [user, currentOrganization]);
+  }, [user]);
 
   const saveAssessment = useCallback(async (assessment: AssessmentData): Promise<AssessmentData> => {
     if (!user) throw new Error('User not authenticated');

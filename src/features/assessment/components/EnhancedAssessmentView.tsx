@@ -30,6 +30,27 @@ export const EnhancedAssessmentView: React.FC<EnhancedAssessmentViewProps> = ({
   // Debug: Track component renders
   console.log('EnhancedAssessmentView rendering');
   
+  // Early return if framework is not available
+  if (!framework || !framework.sections) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Framework Not Available</h2>
+          <p className="text-gray-600 dark:text-gray-300 mb-4">
+            The assessment framework could not be loaded. Please try again or contact support.
+          </p>
+          <button 
+            onClick={onBack}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [currentCategoryIndex, setCurrentCategoryIndex] = useState(0);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -79,9 +100,9 @@ export const EnhancedAssessmentView: React.FC<EnhancedAssessmentViewProps> = ({
   
   const timerRef = useRef<NodeJS.Timeout>();
 
-  const currentSection = framework.sections[currentSectionIndex];
-  const currentCategory = currentSection?.categories[currentCategoryIndex];
-  const currentQuestion = currentCategory?.questions[currentQuestionIndex];
+  const currentSection = framework.sections?.[currentSectionIndex];
+  const currentCategory = currentSection?.categories?.[currentCategoryIndex];
+  const currentQuestion = currentCategory?.questions?.[currentQuestionIndex];
 
   // Timer functionality
   useEffect(() => {
@@ -188,9 +209,9 @@ export const EnhancedAssessmentView: React.FC<EnhancedAssessmentViewProps> = ({
   }, [responses, autoSave, bookmarks, notes, handleSave]);
 
   // Calculate progress
-  const totalQuestions = framework.sections.reduce((sum, section) => 
+  const totalQuestions = framework.sections?.reduce((sum, section) => 
     sum + section.categories.reduce((catSum, category) => 
-      catSum + category.questions.length, 0), 0);
+      catSum + category.questions.length, 0), 0) || 0;
   
   const answeredQuestions = Object.keys(responses).length;
   const progressPercentage = Math.round((answeredQuestions / totalQuestions) * 100);
@@ -400,15 +421,17 @@ export const EnhancedAssessmentView: React.FC<EnhancedAssessmentViewProps> = ({
   };
 
   const goToNextQuestion = useCallback(() => {
-    const section = framework.sections[currentSectionIndex];
-    const category = section.categories[currentCategoryIndex];
+    const section = framework.sections?.[currentSectionIndex];
+    const category = section?.categories?.[currentCategoryIndex];
+    
+    if (!category || !section) return;
     
     if (currentQuestionIndex < category.questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
     } else if (currentCategoryIndex < section.categories.length - 1) {
       setCurrentCategoryIndex(currentCategoryIndex + 1);
       setCurrentQuestionIndex(0);
-    } else if (currentSectionIndex < framework.sections.length - 1) {
+    } else if (currentSectionIndex < (framework.sections?.length || 0) - 1) {
       setCurrentSectionIndex(currentSectionIndex + 1);
       setCurrentCategoryIndex(0);
       setCurrentQuestionIndex(0);
@@ -420,14 +443,14 @@ export const EnhancedAssessmentView: React.FC<EnhancedAssessmentViewProps> = ({
       setCurrentQuestionIndex(currentQuestionIndex - 1);
     } else if (currentCategoryIndex > 0) {
       setCurrentCategoryIndex(currentCategoryIndex - 1);
-      const prevCategory = framework.sections[currentSectionIndex].categories[currentCategoryIndex - 1];
-      setCurrentQuestionIndex(prevCategory.questions.length - 1);
+      const prevCategory = framework.sections?.[currentSectionIndex]?.categories?.[currentCategoryIndex - 1];
+      setCurrentQuestionIndex((prevCategory?.questions?.length || 1) - 1);
     } else if (currentSectionIndex > 0) {
       setCurrentSectionIndex(currentSectionIndex - 1);
-      const prevSection = framework.sections[currentSectionIndex - 1];
-      setCurrentCategoryIndex(prevSection.categories.length - 1);
-      const prevCategory = prevSection.categories[prevSection.categories.length - 1];
-      setCurrentQuestionIndex(prevCategory.questions.length - 1);
+      const prevSection = framework.sections?.[currentSectionIndex - 1];
+      setCurrentCategoryIndex((prevSection?.categories?.length || 1) - 1);
+      const prevCategory = prevSection?.categories?.[prevSection?.categories?.length - 1];
+      setCurrentQuestionIndex((prevCategory?.questions?.length || 1) - 1);
     }
   }, [currentSectionIndex, currentCategoryIndex, currentQuestionIndex, framework.sections]);
 
@@ -981,9 +1004,9 @@ export const EnhancedAssessmentView: React.FC<EnhancedAssessmentViewProps> = ({
                 <button
                   onClick={goToNextQuestion}
                   disabled={
-                    currentSectionIndex === framework.sections.length - 1 &&
-                    currentCategoryIndex === currentSection.categories.length - 1 &&
-                    currentQuestionIndex === currentCategory.questions.length - 1
+                    currentSectionIndex === (framework.sections?.length || 0) - 1 &&
+                    currentCategoryIndex === (currentSection?.categories?.length || 0) - 1 &&
+                    currentQuestionIndex === (currentCategory?.questions?.length || 0) - 1
                   }
                   className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 font-medium shadow-lg hover:shadow-xl"
                 >

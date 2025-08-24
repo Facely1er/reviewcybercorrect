@@ -1,0 +1,22 @@
+{
+  "low": true,
+  "moderate": false,
+  "high": false,
+  "critical": false,
+  "report-type": "summary",
+  "allowlist": [],
+  "advisories": [],
+  "whitelist": [],
+  "skip-dev": false,
+  "package-manager": "npm",
+  "path": "./",
+  "show-found": false,
+  "show-not-found": false,
+  "registry": "https://registry.npmjs.org/",
+  "report": {
+    "format": "text"
+  },
+  "output": {
+    "file": "audit-report.json"
+  }
+}
