@@ -12,6 +12,7 @@ import { NotificationSystem } from './shared/components/ui/NotificationSystem';
 import { monitoring, analytics } from './lib/monitoring';
 import { LazyRoutes, RoutePreloader } from './lib/lazyLoading';
 import { AssessmentDebugger } from './components/AssessmentDebugger';
+import { FrameworkErrorBoundary } from './components/FrameworkErrorBoundary';
 import { useAssessments } from './shared/hooks/useAssessments';
 import { useAuth } from './shared/hooks/useAuth';
 import { enhancedDataService } from './services/enhancedDataService';
@@ -114,13 +115,23 @@ const AssessmentWrapper: React.FC<{
     );
   }
   
+  const framework = getFramework(assessment.frameworkId);
+  
+  // Debug logging
+  console.log('Assessment frameworkId:', assessment.frameworkId);
+  console.log('Retrieved framework:', framework);
+  console.log('Framework sections:', framework?.sections?.length);
+  
   return (
-    <EnhancedAssessmentView
-      assessment={assessment}
-      onSave={onSave}
-      onGenerateReport={onGenerateReport}
-      onBack={onBack}
-    />
+    <FrameworkErrorBoundary frameworkId={assessment.frameworkId}>
+      <EnhancedAssessmentView
+        assessment={assessment}
+        framework={framework}
+        onSave={onSave}
+        onGenerateReport={onGenerateReport}
+        onBack={onBack}
+      />
+    </FrameworkErrorBoundary>
   );
 };
 
