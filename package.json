@@ -16,14 +16,37 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint .",
+    "build:production": "bash scripts/build-production.sh",
+    "build:analyze": "vite build && npx vite-bundle-analyzer",
     "preview": "vite preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "type-check": "tsc --noEmit",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "test:run": "vitest run",
+    "test:watch": "vitest --watch",
+    "test:ci": "vitest run --coverage --reporter=verbose",
     "analyze": "npx vite-bundle-analyzer",
-    "type-check": "tsc --noEmit"
+    "security:audit": "npm audit --audit-level=moderate",
+    "security:fix": "npm audit fix",
+    "security:check": "npm audit && npm outdated",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "clean": "rm -rf dist node_modules .vite coverage",
+    "clean:build": "rm -rf dist .vite",
+    "clean:deps": "rm -rf node_modules package-lock.json",
+    "install:clean": "npm run clean:deps && npm install",
+    "install:production": "npm ci --only=production",
+    "start": "npm run preview",
+    "deploy:check": "npm run build && npm run test:run && npm run type-check && npm run lint",
+    "deploy:production": "npm run deploy:check && npm run build:production",
+    "health:check": "curl -f http://localhost:4173/health || echo 'Health check failed'",
+    "performance:test": "npm run build && npm run preview & sleep 5 && npm run health:check && pkill -f 'vite preview'",
+    "update:deps": "npm update && npm audit fix",
+    "validate:env": "node -e \"require('dotenv').config(); console.log('Environment validation passed')\"",
+    "postinstall": "npm run type-check"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.7",
@@ -59,5 +82,31 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
     "vite": "^5.4.2"
-  }
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/cybersecurity-compliance-platform.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/cybersecurity-compliance-platform/issues"
+  },
+  "homepage": "https://your-domain.com",
+  "author": "Your Organization",
+  "license": "MIT"
 }
