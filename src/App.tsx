@@ -11,6 +11,9 @@ import { ProductionErrorBoundary, RouteErrorBoundary } from './components/ErrorB
 import { NotificationSystem } from './shared/components/ui/NotificationSystem';
 import { monitoring, analytics } from './lib/monitoring';
 import { LazyRoutes, RoutePreloader } from './lib/lazyLoading';
+import { AssessmentDebugger } from './components/AssessmentDebugger';
+import { useAssessments } from './shared/hooks/useAssessments';
+import { useAuth } from './shared/hooks/useAuth';
 import { enhancedDataService } from './services/enhancedDataService';
 import { assessmentService } from './services/assessmentService';
 import { ErrorState, EmptyState } from './shared/components/ui/LoadingStates';
@@ -232,25 +235,36 @@ function AppContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showAssetForm, setShowAssetForm] = useState(false);
 
-  // Use local data service directly for better reliability
-  const [savedAssessments, setSavedAssessments] = useState<AssessmentData[]>([]);
+  // Use assessment hook for proper state management
+  const { user } = useAuth();
+  const { 
+    assessments: savedAssessments, 
+    loading: assessmentsLoading, 
+    error: assessmentsError,
+    saveAssessment: saveAssessmentHook,
+    removeAssessment: removeAssessmentHook
+  } = useAssessments();
   const [assets, setAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Handle assessment loading errors
+  useEffect(() => {
+    if (assessmentsError) {
+      addNotification('error', `Failed to load assessments: ${assessmentsError}`);
+    }
+  }, [assessmentsError]);
+
   // Initialize monitoring on app start
   useEffect(() => {
-    errorMonitoring.initialize();
-    performanceMonitoring.initialize();
+    monitoring.initialize?.() || console.log('Monitoring initialized');
     
-    // Load data from localStorage
+    // Load assets from localStorage
     try {
-      const assessments = dataService.getAssessments();
       const assetData = dataService.getAssets();
-      setSavedAssessments(assessments);
       setAssets(assetData);
       
       // Load demo data if this is first visit and no data exists
-      if (assessments.length === 0 && assetData.length === 0 && !dataService.isDemoDataLoaded()) {
+      if (savedAssessments.length === 0 && assetData.length === 0 && !dataService.isDemoDataLoaded()) {
         const shouldLoadDemo = !localStorage.getItem('demo-declined') && window.confirm(
           'Welcome to CyberCorrect™! Would you like to load demo data to explore the platform?\n\n' +
           'Demo data includes:\n' +
@@ -262,7 +276,6 @@ function AppContent() {
         
         if (shouldLoadDemo) {
           dataService.loadDemoData();
-          setSavedAssessments(dataService.getAssessments());
           setAssets(dataService.getAssets());
           addNotification('info', 'Demo data loaded successfully! Go to Settings > Data Management to clear when ready for real business use.');
         } else {
@@ -275,7 +288,7 @@ function AppContent() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [savedAssessments.length]);
 
   // Navigation menu structure
   const navigationMenus = [
@@ -466,8 +479,7 @@ function AppContent() {
     console.log('Saving assessment:', assessment.id);
     
     try {
-      dataService.saveAssessment(assessment);
-      setSavedAssessments(prev => prev.map(a => a.id === assessment.id ? assessment : a));
+      await saveAssessmentHook(assessment);
       addNotification('success', 'Assessment saved successfully');
     } catch (error) {
       console.error('Failed to save assessment:', error);
@@ -479,8 +491,7 @@ function AppContent() {
     console.log('Deleting assessment:', assessmentId);
     
     try {
-      dataService.deleteAssessment(assessmentId);
-      setSavedAssessments(prev => prev.filter(a => a.id !== assessmentId));
+      await removeAssessmentHook(assessmentId);
       addNotification('success', 'Assessment deleted successfully');
     } catch (error) {
       console.error('Failed to delete assessment:', error);
@@ -1011,6 +1022,7 @@ function AppContent() {
         onRemove={removeNotification}
       />
       <Analytics />
+      <AssessmentDebugger />
       </ErrorBoundary>
     </div>
   );
