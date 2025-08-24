@@ -1,17 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useEffect } from 'react';
 import { Permission, ROLE_PERMISSIONS } from '../../lib/security';
-import { 
-  signUp as supabaseSignUp, 
-  signIn as supabaseSignIn, 
-  signOut as supabaseSignOut,
-  getCurrentUser,
-  getCurrentSession,
-  getProfile,
-  updateProfile,
-  supabase,
-  isSupabaseReady
-} from '../../lib/supabase';
+import { authService } from '../../lib/auth';
+import { supabase, isSupabaseReady } from '../../lib/supabase';
 import { organizationService } from '../../services/organizationService';
 
 interface AuthUser {
@@ -112,7 +103,7 @@ export const useAuth = () => {
     }
 
     try {
-      const { session } = await getCurrentSession();
+      const { data: { session } } = await authService.getCurrentSession();
       if (session?.user) {
         await loadUserData(session.user.id);
       } else {
@@ -133,7 +124,7 @@ export const useAuth = () => {
       setAuthState(prev => ({ ...prev, loading: true }));
 
       // Get user profile
-      const { data: profile, error: profileError } = await getProfile(userId);
+      const { data: profile, error: profileError } = await authService.getProfile(userId);
       if (profileError) throw profileError;
 
       // Get user organizations
@@ -188,15 +179,15 @@ export const useAuth = () => {
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
       
-      const { data, error } = await supabaseSignIn(email, password);
+      const result = await authService.signIn(email, password);
       
-      if (error) {
-        setAuthState(prev => ({ ...prev, loading: false, error: error.message }));
-        return { success: false, error: error.message };
+      if (!result.success) {
+        setAuthState(prev => ({ ...prev, loading: false, error: result.error }));
+        return { success: false, error: result.error };
       }
 
-      if (data.user) {
-        await loadUserData(data.user.id);
+      if (result.data?.user) {
+        await loadUserData(result.data.user.id);
         return { success: true, error: null };
       }
 
@@ -218,16 +209,16 @@ export const useAuth = () => {
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
       
-      const { data, error } = await supabaseSignUp(email, password, userData);
+      const result = await authService.signUp(email, password, userData);
       
-      if (error) {
-        setAuthState(prev => ({ ...prev, loading: false, error: error.message }));
-        return { success: false, error: error.message };
+      if (!result.success) {
+        setAuthState(prev => ({ ...prev, loading: false, error: result.error }));
+        return { success: false, error: result.error };
       }
 
-      if (data.user) {
+      if (result.data?.user) {
         // Profile will be created automatically via database trigger
-        await loadUserData(data.user.id);
+        await loadUserData(result.data.user.id);
         return { success: true, error: null };
       }
 
@@ -255,7 +246,8 @@ export const useAuth = () => {
     }
 
     try {
-      const { error } = await supabaseSignOut();
+      const result = await authService.signOut();
+      const error = result.success ? null : { message: result.error };
       
       setAuthState({
         user: null,
@@ -280,8 +272,8 @@ export const useAuth = () => {
 
     try {
       if (isSupabaseReady) {
-        const { data, error } = await updateProfile(authState.user.id, updates);
-        if (error) throw error;
+        const result = await authService.updateProfile(authState.user.id, updates);
+        if (!result.success) throw new Error(result.error);
 
         setAuthState(prev => ({
           ...prev,
@@ -302,7 +294,7 @@ export const useAuth = () => {
     try {
       // Update user's current organization
       if (authState.user && isSupabaseReady) {
-        await updateProfile(authState.user.id, { currentOrganizationId: organizationId });
+        await authService.updateProfile(authState.user.id, { currentOrganizationId: organizationId });
       }
 
       setAuthState(prev => ({

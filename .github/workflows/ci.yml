@@ -1,0 +1,349 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  NODE_VERSION: '18'
+  CACHE_KEY_PREFIX: 'v1'
+
+jobs:
+  # Security and dependency scanning
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run security audit
+        run: npm audit --audit-level high
+
+      - name: Run dependency vulnerability scan
+        run: npx audit-ci --config .audit-ci.json
+
+      - name: CodeQL Analysis
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  # Code quality and linting
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint -- --format=json --output-file=eslint-report.json
+        continue-on-error: true
+
+      - name: Run TypeScript type checking
+        run: npm run type-check
+
+      - name: Upload ESLint report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eslint-report
+          path: eslint-report.json
+
+  # Unit and integration tests
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:run -- --coverage --reporter=verbose --reporter=json --outputFile=test-results.json
+
+      - name: Generate coverage report
+        run: npm run test:coverage -- --reporter=lcov --reporter=json
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-node-${{ matrix.node-version }}
+          path: |
+            test-results.json
+            coverage/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+
+  # Build and bundle analysis
+  build:
+    name: Build & Bundle Analysis
+    runs-on: ubuntu-latest
+    needs: [security, quality, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+          VITE_APP_VERSION: ${{ github.sha }}
+
+      - name: Analyze bundle size
+        run: npm run analyze
+
+      - name: Check bundle size limits
+        run: |
+          echo "Checking bundle size limits..."
+          MAIN_BUNDLE_SIZE=$(stat -c%s dist/assets/index-*.js | head -1)
+          MAX_BUNDLE_SIZE=1048576  # 1MB
+          if [ $MAIN_BUNDLE_SIZE -gt $MAX_BUNDLE_SIZE ]; then
+            echo "Main bundle size ($MAIN_BUNDLE_SIZE bytes) exceeds limit ($MAX_BUNDLE_SIZE bytes)"
+            exit 1
+          fi
+          echo "Bundle size check passed: $MAIN_BUNDLE_SIZE bytes"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            dist/
+            bundle-analyzer-report.html
+
+  # End-to-end tests
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps
+
+      - name: Run E2E tests
+        run: npx playwright test
+        env:
+          CI: true
+
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-test-results
+          path: |
+            test-results/
+            playwright-report/
+
+  # Accessibility tests
+  accessibility:
+    name: Accessibility Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+
+      - name: Run accessibility tests
+        run: npx @axe-core/cli dist/index.html --exit
+
+      - name: Lighthouse CI
+        run: |
+          npm install -g @lhci/cli@0.12.x
+          lhci autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+  # Performance tests
+  performance:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+
+      - name: Run performance tests
+        run: |
+          npm install -g lighthouse
+          lighthouse --output=json --output-path=lighthouse-report.json --chrome-flags="--headless" dist/index.html
+
+      - name: Check performance budgets
+        run: |
+          PERFORMANCE_SCORE=$(cat lighthouse-report.json | jq '.categories.performance.score * 100')
+          MIN_SCORE=80
+          if [ $(echo "$PERFORMANCE_SCORE < $MIN_SCORE" | bc) -eq 1 ]; then
+            echo "Performance score ($PERFORMANCE_SCORE) is below minimum ($MIN_SCORE)"
+            exit 1
+          fi
+          echo "Performance score check passed: $PERFORMANCE_SCORE"
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-results
+          path: lighthouse-report.json
+
+  # Security scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+
+      - name: Run OWASP ZAP scan
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          target: 'file:///github/workspace/dist/index.html'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a'
+
+  # Deploy preview (for PRs)
+  deploy-preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: [build, test, e2e]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+
+      - name: Deploy to Netlify
+        uses: nwtgck/actions-netlify@v2.1
+        with:
+          publish-dir: './dist'
+          production-branch: main
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Deploy from GitHub Actions"
+          enable-pull-request-comment: true
+          enable-commit-comment: false
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+  # Notification on failure
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [security, quality, test, build, e2e, accessibility, performance]
+    if: failure()
+    steps:
+      - name: Notify team
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#ci-alerts'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

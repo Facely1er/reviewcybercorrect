@@ -7,10 +7,10 @@ import {
 } from 'lucide-react';
 import { ThemeProvider, useTheme } from './shared/contexts/ThemeContext';
 import { ThemeToggle } from './shared/components/ui/ThemeToggle';
-import { ErrorBoundary } from './components/ErrorBoundary';
+import { ProductionErrorBoundary, RouteErrorBoundary } from './components/ErrorBoundary';
 import { NotificationSystem } from './shared/components/ui/NotificationSystem';
-import { errorMonitoring } from './lib/errorMonitoring';
-import { performanceMonitoring } from './lib/performanceMonitoring';
+import { monitoring, analytics } from './lib/monitoring';
+import { LazyRoutes, RoutePreloader } from './lib/lazyLoading';
 import { enhancedDataService } from './services/enhancedDataService';
 import { assessmentService } from './services/assessmentService';
 import { ErrorState, EmptyState } from './shared/components/ui/LoadingStates';
